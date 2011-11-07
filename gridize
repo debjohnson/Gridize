@@ -1,0 +1,183 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'rmagick'
+require 'optparse'
+
+options = {}
+
+opt_parser = OptionParser.new do |opt|
+  opt.banner = "Usage: gridize COMMAND [OPTIONS] PATH"
+  opt.separator  ""
+  opt.separator  "Commands"
+  opt.separator  "     display: display gridized image"
+  opt.separator  "     save: save gridized image"
+  opt.separator  ""
+  opt.separator  "Options"
+
+  # opt.on("-g","--grid-size SIZE",Integer,"Size of large grid (defaults to 250px)") do |g|
+  #   options[:grid_size] = g
+  # end
+
+  opt.on("-s","--square_size SIZE",Integer,"Size of cropped squares (defaults to 50px)") do |s|
+    options[:square_size] = s
+  end
+
+  # opt.on("--path","-p","Path to image or directory of images") do |p|
+  #   options[:path] = Dir.new(p)
+  # end
+
+  opt.on("-w","--white-percentage CUTOFF",Float,"Percent of square that can be white (0-100)% (defaults to 50%)") do |w|
+    options[:white_percentage] = w
+  end
+
+  opt.on("-a","--saturation VALUE",Float,"Saturation value to consider 'white'. 0 is most white (defaults to 2)") do |a|
+    options[:saturation] = a
+  end
+
+  opt.on("-l","--lightness VALUE",Float,"Lightness value to consider 'white'. 100 is most white (defaults 98)") do |l|
+    options[:lightness] = l
+  end
+
+  options[:display] = false
+  opt.on("-d","--display","Display grid image instead of saving") do
+    options[:display] = true
+  end
+
+  opt.on("-o","--output-width SIZE",Integer,"Number of squares per side of output image") do |o|
+    options[:output_width] = o
+  end
+
+  opt.on("-h","--help","help") do
+    puts opt_parser
+  end
+end
+
+if ARGV.empty?
+  puts opt_parser
+  exit
+end
+
+opt_parser.parse!
+
+path = ARGV[0] || '/Users/Matt/Dropbox/Matt and Debs Stuff!/chair/Cropped_chair_new.jpg'
+# grid_size = options[:grid_size] || 50
+square_size = options[:square_size] || 50
+output_width = options[:output_width] || 3
+white_percentage = options[:white_percentage] || 50
+saturation = options[:saturation] || 2
+lightness = options[:lightness] || 98
+
+# offset = (grid_size - square_size) / 2
+
+files = []
+if File.file?(path)
+  files = [path]
+else
+  Dir.entries(path).map { |e| files << path + '/' + e if (e.match(/^\w*\.(jpg|gif|png)/) && !e.match(/grid/)) }
+end
+
+# white = Magick::ImageList.new.new_image(square_size, square_size)
+
+files.each do |file|
+  img = Magick::Image.read(file).first
+  width = img.columns
+  height = img.rows
+
+  # x = y = 0
+  # offsets = []
+  #
+  # (grids_high * grids_wide).times do
+  #   x_offset = (grid_size * x) + offset
+  #   y_offset = (grid_size * y) + offset
+  #
+  #   offsets << [x_offset, y_offset]
+  #
+  #   x += 1
+  #   if x == grids_wide
+  #     x = 0
+  #     y += 1
+  #   end
+  # end
+
+  # offsets = offsets.sort_by { rand }
+  img_array = []
+  detail_grid = Magick::ImageList.new
+
+  # offsets.each do |o|
+  total_squares = output_width ** 2
+
+  while img_array.size < total_squares
+    rand1 = Random.rand(width - square_size)
+    rand2 = Random.rand(height - square_size)
+# p '------'
+    new_square = img.crop(rand1, rand2, square_size, square_size)
+
+    hist = new_square.color_histogram
+
+    w = 0
+
+    # to_color(Magick::SVGCompliance, false, 8, false)
+
+    # colors = hist.inject({}) { |n, h| n[h[0].to_color] = h[1]; n }
+    colors = hist.inject({}) { |n, h| n[h[0].to_hsla] = h[1]; n }
+
+    # percent_white = colors["white"] ? colors["white"].to_f*100 / (square_size ** 2) : 0
+
+    # pixels = hist.keys.sort_by { |pixel| hist[pixel] }
+
+    # if percent_white < white_percentage
+    i = 0
+    colors.each do |k, v|
+      i += v if k[1] < saturation && k[2] > lightness
+    end
+
+    percent_whiteish = i.to_f*100 / (square_size ** 2)
+
+    img_array << new_square if percent_whiteish < white_percentage
+  end
+
+    # colors = new_square.quantize(256).color_histogram.size
+
+    # factor = white[0].dup.difference(new_square)[0] * new_square.quantize(500).color_histogram.size
+      # new_square.display
+
+
+    # img_array << new_square if factor > 4000
+  # end
+
+  # white_cutoff = 0
+
+  # img_array = img_array.sort_by { |square| white[0].dup.difference(square)[0] }
+
+  # extra = img_array.size - output_size ** 2
+
+  # img_array = img_array.sort_by{rand}.drop(extra)#  { |im| img_array.size > output_size ** 2 }
+  img_array.map { |j| detail_grid << j }
+  # img_array.map { |i| p Math.sqrt(white[0].dup.difference(i)[0]) * i.quantize(300).color_histogram.size }
+
+  # while white_cutoff < starting_cutoff && img_array.size > output_size ** 2
+  #   img_array.delete_if do |square|
+  #     coloredness = white[0].dup.difference(square)[1]
+  #     coloredness < white_cutoff
+  #     break if img_array.size == output_size ** 2
+  #   end
+  #
+  #   white_cutoff += 0.01
+  # end
+
+  # extra = img_array.size > output_size ** 2 ? img_array.size - output_size ** 2 : 0
+  # img_array.drop(extra).map { |e| detail_grid << e }
+  # img_array.map { |e| detail_grid << e }
+
+  montage = detail_grid.montage do
+    self.geometry = "#{square_size}x#{square_size}+0+0"
+    self.tile = "#{output_width}x#{output_width}"
+  end
+
+  if options[:display]
+    montage.display
+  else
+    save_path = file[0..-5] + "_grid s=#{square_size} w=#{white_percentage} a=#{saturation} l=#{lightness}.jpg"
+    montage.write(save_path)
+  end
+end
